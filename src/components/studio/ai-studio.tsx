@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { editor } from 'monaco-editor';
 import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -13,21 +15,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
 import { runJavascript } from '@/lib/code-runner';
 import { explainCode } from '@/ai/flows/explain-code';
 import { fixCodeErrors } from '@/ai/flows/fix-code-errors';
 import { autoCompleteCode } from '@/ai/flows/auto-complete-code';
+import { chatWithCode } from '@/ai/flows/chat-with-code';
 
 import {
   Play,
@@ -38,9 +36,10 @@ import {
   ChevronUp,
   ChevronDown,
   Terminal,
-  CloudCog,
   Zap,
-  MessageSquareText,
+  User,
+  Send,
+  Trash2,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -56,18 +55,15 @@ const DynamicEditor = dynamic(
 );
 
 type Language = 'javascript' | 'python';
-type LoadingStates = {
-  explain?: boolean;
-  fix?: boolean;
-  autocomplete?: boolean;
-  run?: boolean;
+type ChatMessage = {
+  role: 'user' | 'ai';
+  content: string;
 };
-type SidebarView = 'tools' | 'assistant';
 
 const defaultCode: Record<Language, string> = {
   javascript: `// Welcome to AI Studio!
 // You can write and execute JavaScript code.
-// Use the AI tools in the left sidebar to boost your productivity.
+// Use the AI tools in the panel on the right to boost your productivity.
 
 function factorial(n) {
   if (n === 0) {
@@ -95,18 +91,34 @@ fibonacci(10)
 `,
 };
 
+const initialChatMessages: ChatMessage[] = [
+    {
+        role: 'ai',
+        content: "Hello! I'm your AI assistant. How can I help you with your code today? You can ask me to explain, fix, or even write code for you.",
+    }
+]
+
 export function AIStudio() {
   const [code, setCode] = useState<string>(defaultCode.javascript);
   const [language, setLanguage] = useState<Language>('javascript');
   const [output, setOutput] = useState<string[]>([]);
-  const [explanation, setExplanation] = useState<string>('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialChatMessages);
+  const [chatInput, setChatInput] = useState<string>('');
   const [isOutputVisible, setIsOutputVisible] = useState(true);
-  const [loading, setLoading] = useState<LoadingStates>({});
-  const [sidebarView, setSidebarView] = useState<SidebarView>('tools');
+  const [isLoading, setIsLoading] = useState(false);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
   const { toast } = useToast();
+  
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatMessages]);
 
   const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
@@ -116,7 +128,7 @@ export function AIStudio() {
     setLanguage(value);
     setCode(defaultCode[value]);
     setOutput([]);
-    setExplanation('');
+    setChatMessages(initialChatMessages);
   };
 
   const handleRunCode = async () => {
@@ -124,11 +136,11 @@ export function AIStudio() {
       setOutput(['Python execution is not supported in this version.']);
       return;
     }
-    setLoading({ run: true });
+    setIsLoading(true);
     setOutput(['Executing...']);
     const result = await runJavascript(code);
     setOutput(result);
-    setLoading({ run: false });
+    setIsLoading(false);
   };
   
   const handleExplain = async () => {
@@ -141,46 +153,41 @@ export function AIStudio() {
       return;
     }
     
-    setLoading({ explain: true });
-    setExplanation('Analyzing code...');
-    setSidebarView('assistant');
+    setIsLoading(true);
+    setChatMessages(prev => [...prev, {role: 'user', content: `Explain this code:\n\`\`\`${language}\n${selectedCode}\n\`\`\``}]);
+
     try {
       const result = await explainCode({ code: selectedCode, language });
-      setExplanation(result.explanation);
+      setChatMessages(prev => [...prev, {role: 'ai', content: result.explanation}]);
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to explain code.' });
-      setExplanation('Could not get an explanation.');
+      setChatMessages(prev => [...prev, {role: 'ai', content: 'Sorry, I encountered an error trying to explain the code.'}]);
     } finally {
-      setLoading({});
+      setIsLoading(false);
     }
   };
   
   const handleFixErrors = async () => {
     if (!editorRef.current) return;
-    setLoading({ fix: true });
-    setExplanation('Fixing errors...');
-    setSidebarView('assistant');
+    setIsLoading(true);
+    setChatMessages(prev => [...prev, {role: 'user', content: 'Fix the errors in the current code.'}]);
+    
     try {
       const result = await fixCodeErrors({ code, language });
       setCode(result.correctedCode);
-      if (result.explanation) {
-        setExplanation(result.explanation);
-      } else {
-        setExplanation('No errors found.');
-      }
+      const response = result.explanation ? result.explanation : 'No errors found. The code seems correct.';
+      setChatMessages(prev => [...prev, {role: 'ai', content: response}]);
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to fix code.' });
-       setExplanation('Could not fix errors.');
+       setChatMessages(prev => [...prev, {role: 'ai', content: 'Sorry, I could not fix the errors.'}]);
     } finally {
-      setLoading({});
+      setIsLoading(false);
     }
   };
 
   const handleAutoComplete = async () => {
     if (!editorRef.current) return;
-    setLoading({ autocomplete: true });
-    setExplanation('Generating completion...');
-    setSidebarView('assistant');
+    setIsLoading(true);
     try {
       const result = await autoCompleteCode({ codeSnippet: code, language });
       const currentPosition = editorRef.current.getPosition();
@@ -193,58 +200,49 @@ export function AIStudio() {
          setCode(code + result.completedCode);
       }
      
-      setExplanation('Code completion applied.');
+      toast({ title: 'Success', description: 'Code completion applied.' });
     } catch (error) {
        toast({ variant: 'destructive', title: 'Error', description: 'Failed to generate completion.' });
-       setExplanation('Could not generate completion.');
     } finally {
-      setLoading({});
+      setIsLoading(false);
+    }
+  };
+
+  const handleChatSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!chatInput.trim() || isLoading) return;
+
+    const newQuery = chatInput;
+    setChatInput('');
+    setIsLoading(true);
+    setChatMessages(prev => [...prev, {role: 'user', content: newQuery}]);
+
+    try {
+        const result = await chatWithCode({ code, language, query: newQuery });
+        setChatMessages(prev => [...prev, {role: 'ai', content: result.response}]);
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Failed to get a response.' });
+        setChatMessages(prev => [...prev, {role: 'ai', content: 'Sorry, I encountered an error.'}]);
+    } finally {
+        setIsLoading(false);
     }
   };
 
   return (
-    <TooltipProvider delayDuration={100}>
-      <div className="flex h-screen w-screen bg-background text-foreground font-sans">
-        {/* Activity Bar */}
-        <div className="flex flex-col items-center justify-between w-16 bg-card p-2 border-r shrink-0">
-            <div className="flex flex-col items-center gap-2">
-                <Bot className="h-8 w-8 text-primary mb-2" />
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant={sidebarView === 'tools' ? 'secondary' : 'ghost'} size="icon" className="h-12 w-12" onClick={() => setSidebarView('tools')}>
-                            <Sparkles className="h-6 w-6" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right"><p>AI Tools</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant={sidebarView === 'assistant' ? 'secondary' : 'ghost'} size="icon" className="h-12 w-12" onClick={() => setSidebarView('assistant')}>
-                            <MessageSquareText className="h-6 w-6" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right"><p>AI Assistant</p></TooltipContent>
-                </Tooltip>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-                <ThemeToggle />
-            </div>
-        </div>
-
-        {/* Sidebar */}
-        <aside className="w-72 border-r bg-card flex flex-col shrink-0">
-          <header className="p-4 border-b">
-              <h1 className="text-lg font-semibold tracking-tight">
-                  {sidebarView === 'tools' ? 'Tools' : 'AI Assistant'}
-              </h1>
-          </header>
-          <div className="flex-1 overflow-y-auto">
-            {sidebarView === 'tools' && (
-                <div className="p-4 flex flex-col gap-4">
-                  <div className="flex flex-col gap-1">
+    <div className="flex h-screen w-screen bg-background text-foreground font-sans">
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <header className="flex h-14 items-center justify-between border-b px-4 gap-4">
+            <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                    <Bot className="h-6 w-6 text-primary" />
+                    <h1 className="text-lg font-semibold tracking-tight">AI Studio</h1>
+                </div>
+                <div className="flex items-center gap-2">
                     <label className="text-sm font-medium text-muted-foreground">Language</label>
                     <Select onValueChange={handleLanguageChange} value={language}>
-                      <SelectTrigger>
+                      <SelectTrigger className="w-32">
                         <SelectValue placeholder="Select language" />
                       </SelectTrigger>
                       <SelectContent>
@@ -252,99 +250,125 @@ export function AIStudio() {
                         <SelectItem value="python">Python</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <h2 className="text-sm font-medium text-muted-foreground">AI Tools</h2>
-                    <Button onClick={handleExplain} disabled={!!loading.explain || !!loading.fix} className="justify-start">
-                      {loading.explain ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                      Explain Code
-                    </Button>
-                    <Button onClick={handleFixErrors} disabled={!!loading.fix || !!loading.explain} className="justify-start">
-                      {loading.fix ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                      Fix Errors
-                    </Button>
-                    <Button onClick={handleAutoComplete} disabled={!!loading.autocomplete} className="justify-start">
-                      {loading.autocomplete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
-                      Auto-Complete
-                    </Button>
-                  </div>
-                  <Separator />
-                  <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="ghost" className="justify-start" disabled>
-                          <CloudCog className="mr-2 h-4 w-4" />
-                          Connect to Mcp-server
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>Coming Soon!</p>
-                      </TooltipContent>
-                    </Tooltip>
                 </div>
-            )}
-            {sidebarView === 'assistant' && (
-                <div className="p-4 h-full">
-                    <ScrollArea className="h-full pr-3">
-                        <p className="text-sm whitespace-pre-wrap font-code">
-                        {explanation || 'The AI assistant\'s responses will appear here.'}
-                        </p>
-                    </ScrollArea>
-                </div>
-            )}
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col">
-          {/* Top Bar */}
-          <header className="flex h-14 items-center justify-end border-b px-4">
-            <Button onClick={handleRunCode} disabled={!!loading.run}>
-              {loading.run ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-              Run
-            </Button>
-          </header>
-
-          {/* Editor and Output */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 relative">
-              <DynamicEditor
-                language={language}
-                value={code}
-                onChange={(value) => setCode(value || '')}
-                onMount={handleEditorDidMount}
-                theme={theme === 'dark' ? 'vs-dark' : 'light'}
-              />
             </div>
-            {isOutputVisible && (
-              <div className="h-64 border-t bg-card">
-                <header className="flex h-12 items-center justify-between border-b px-4">
-                  <div className="flex items-center gap-2">
-                    <Terminal className="h-5 w-5" />
-                    <h2 className="font-medium">Output</h2>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(false)}>
-                    <ChevronDown className="h-5 w-5" />
-                  </Button>
-                </header>
-                <ScrollArea className="h-[calc(16rem-3rem)]">
-                  <pre className="p-4 text-sm font-code">{output.join('\n')}</pre>
-                </ScrollArea>
-              </div>
-            )}
-            {!isOutputVisible && (
-              <header className="flex h-12 items-center justify-between border-t px-4">
-                 <div className="flex items-center gap-2">
-                    <Terminal className="h-5 w-5" />
-                    <h2 className="font-medium">Output</h2>
-                  </div>
-                <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(true)}>
-                  <ChevronUp className="h-5 w-5" />
+            <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <Button onClick={handleRunCode} disabled={isLoading}>
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    Run
+                </Button>
+            </div>
+        </header>
+
+        {/* Editor and Output */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 relative">
+            <DynamicEditor
+              language={language}
+              value={code}
+              onChange={(value) => setCode(value || '')}
+              onMount={handleEditorDidMount}
+              theme={theme === 'dark' ? 'vs-dark' : 'light'}
+            />
+          </div>
+          {isOutputVisible && (
+            <div className="h-64 border-t bg-card">
+              <header className="flex h-12 items-center justify-between border-b px-4">
+                <div className="flex items-center gap-2">
+                  <Terminal className="h-5 w-5" />
+                  <h2 className="font-medium">Output</h2>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(false)}>
+                  <ChevronDown className="h-5 w-5" />
                 </Button>
               </header>
-            )}
+              <ScrollArea className="h-[calc(16rem-3rem)]">
+                <pre className="p-4 text-sm font-code">{output.join('\n')}</pre>
+              </ScrollArea>
+            </div>
+          )}
+          {!isOutputVisible && (
+            <header className="flex h-12 items-center justify-between border-t px-4">
+                <div className="flex items-center gap-2">
+                <Terminal className="h-5 w-5" />
+                <h2 className="font-medium">Output</h2>
+                </div>
+              <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(true)}>
+                <ChevronUp className="h-5 w-5" />
+              </Button>
+            </header>
+          )}
+        </div>
+      </main>
+
+      {/* Sidebar */}
+      <aside className="w-96 border-l bg-card flex flex-col shrink-0">
+        <header className="p-4 border-b flex items-center justify-between h-14">
+            <h1 className="text-lg font-semibold tracking-tight">AI Assistant</h1>
+            <Button variant="ghost" size="icon" onClick={() => setChatMessages(initialChatMessages)} disabled={isLoading}>
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Clear Chat</span>
+            </Button>
+        </header>
+        
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <ScrollArea className="flex-1 p-4">
+            <div className="space-y-4">
+            {chatMessages.map((message, index) => (
+              <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback>
+                    {message.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                  </AvatarFallback>
+                </Avatar>
+                <div className={`rounded-lg p-3 text-sm max-w-[80%] break-words ${message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                  <ReactMarkdown 
+                    className="prose prose-sm dark:prose-invert prose-p:my-0 prose-headings:my-1"
+                    remarkPlugins={[remarkGfm]}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            ))}
+            </div>
+            <div ref={messagesEndRef} />
+          </ScrollArea>
+
+          <div className="p-4 border-t bg-background/50">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Button onClick={handleExplain} disabled={isLoading} size="sm" variant="outline" className="flex-1">
+                <Sparkles className="mr-2 h-4 w-4" /> Explain
+              </Button>
+              <Button onClick={handleFixErrors} disabled={isLoading} size="sm" variant="outline" className="flex-1">
+                <Wand2 className="mr-2 h-4 w-4" /> Fix
+              </Button>
+              <Button onClick={handleAutoComplete} disabled={isLoading} size="sm" variant="outline" className="flex-1">
+                <Zap className="mr-2 h-4 w-4" /> Complete
+              </Button>
+            </div>
+            <form onSubmit={handleChatSubmit} className="flex items-start gap-2">
+              <Textarea 
+                value={chatInput} 
+                onChange={e => setChatInput(e.target.value)}
+                placeholder="Ask a question or give an instruction..."
+                className="min-h-[60px] max-h-48 resize-y text-sm"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleChatSubmit(e as any);
+                  }
+                }}
+                disabled={isLoading}
+              />
+              <Button type="submit" size="icon" disabled={isLoading || !chatInput.trim()}>
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </form>
           </div>
-        </main>
-      </div>
-    </TooltipProvider>
+        </div>
+      </aside>
+    </div>
   );
 }
