@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 
 import { cn } from '@/lib/utils';
 import { runJavascript } from '@/lib/code-runner';
@@ -37,6 +38,7 @@ import {
   Trash2,
   FileCode2,
   GitBranch,
+  Puzzle,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -51,6 +53,7 @@ const DynamicEditor = dynamic(
   }
 );
 
+type ActiveView = 'explorer' | 'source-control' | 'extensions';
 type Language = 'javascript' | 'python';
 type ChatMessage = {
   role: 'user' | 'ai';
@@ -95,6 +98,96 @@ const initialChatMessages: ChatMessage[] = [
     }
 ]
 
+const ExplorerPanel = ({ language, onLanguageChange }: { language: Language, onLanguageChange: (lang: Language) => void }) => (
+    <>
+        <header className="flex h-14 items-center border-b px-4">
+          <h2 className="font-semibold text-lg tracking-tight">Explorer</h2>
+        </header>
+        <ScrollArea className="flex-1">
+          <nav className="grid gap-1 p-2">
+            <button
+              onClick={() => onLanguageChange('javascript')}
+              className={cn(
+                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
+                language === 'javascript'
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              )}
+            >
+              <FileCode2 className="h-4 w-4" />
+              <span>script.js</span>
+            </button>
+            <button
+              onClick={() => onLanguageChange('python')}
+              className={cn(
+                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
+                language === 'python'
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              )}
+            >
+              <FileCode2 className="h-4 w-4" />
+              <span>script.py</span>
+            </button>
+          </nav>
+        </ScrollArea>
+    </>
+);
+
+const SourceControlPanel = () => (
+  <>
+    <header className="flex h-14 items-center border-b px-4">
+      <h2 className="font-semibold text-lg tracking-tight">Source Control</h2>
+    </header>
+    <ScrollArea className="flex-1">
+      <div className="p-4 space-y-4">
+        <Textarea placeholder="Commit message..." className="text-sm" />
+        <Button className="w-full">Commit</Button>
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Changes</h3>
+          <div className="flex items-center gap-2 rounded-md p-2 hover:bg-muted/50">
+            <FileCode2 className="h-4 w-4" />
+            <span className="text-sm">script.js</span>
+          </div>
+        </div>
+      </div>
+    </ScrollArea>
+  </>
+);
+
+const ExtensionsPanel = () => (
+  <>
+    <header className="flex h-14 items-center border-b px-4">
+      <h2 className="font-semibold text-lg tracking-tight">Extensions</h2>
+    </header>
+    <ScrollArea className="flex-1">
+      <div className="p-4 space-y-4">
+        <Input placeholder="Search extensions in Marketplace" />
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Popular</h3>
+          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+            <div className="p-2 bg-blue-200 dark:bg-blue-900/50 rounded-md"><Puzzle className="h-6 w-6 text-blue-800 dark:text-blue-300" /></div>
+            <div className="flex-1">
+              <p className="font-semibold">Prettier - Code formatter</p>
+              <p className="text-xs text-muted-foreground">Formats your code automatically.</p>
+            </div>
+            <Button variant="outline" size="sm">Install</Button>
+          </div>
+          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+             <div className="p-2 bg-purple-200 dark:bg-purple-900/50 rounded-md"><Puzzle className="h-6 w-6 text-purple-800 dark:text-purple-300" /></div>
+            <div className="flex-1">
+              <p className="font-semibold">ESLint</p>
+              <p className="text-xs text-muted-foreground">Integrates ESLint into VS Code.</p>
+            </div>
+            <Button variant="outline" size="sm">Install</Button>
+          </div>
+        </div>
+      </div>
+    </ScrollArea>
+  </>
+);
+
+
 export function AIStudio() {
   const [code, setCode] = useState<string>(defaultCode.javascript);
   const [language, setLanguage] = useState<Language>('javascript');
@@ -103,6 +196,7 @@ export function AIStudio() {
   const [chatInput, setChatInput] = useState<string>('');
   const [isOutputVisible, setIsOutputVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeView, setActiveView] = useState<ActiveView>('explorer');
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -230,47 +324,45 @@ export function AIStudio() {
       {/* Activity Bar */}
       <div className="flex w-16 flex-col items-center gap-y-4 border-r bg-card py-4">
         <button 
-          className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+          onClick={() => setActiveView('explorer')}
+          className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-lg",
+              activeView === 'explorer' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          )}
           aria-label="Files"
           title="Files"
         >
           <FileCode2 className="h-6 w-6" />
         </button>
+        <button 
+          onClick={() => setActiveView('source-control')}
+          className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-lg",
+              activeView === 'source-control' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          )}
+          aria-label="Source Control"
+          title="Source Control"
+        >
+          <GitBranch className="h-6 w-6" />
+        </button>
+        <button 
+          onClick={() => setActiveView('extensions')}
+          className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-lg",
+              activeView === 'extensions' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          )}
+          aria-label="Extensions"
+          title="Extensions"
+        >
+          <Puzzle className="h-6 w-6" />
+        </button>
       </div>
       
       {/* Left Sidebar (Explorer) */}
       <div className="hidden w-64 border-r bg-card md:flex md:flex-col shrink-0">
-        <header className="flex h-14 items-center border-b px-4">
-          <h2 className="font-semibold text-lg tracking-tight">Explorer</h2>
-        </header>
-        <ScrollArea className="flex-1">
-          <nav className="grid gap-1 p-2">
-            <button
-              onClick={() => handleLanguageChange('javascript')}
-              className={cn(
-                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
-                language === 'javascript'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              )}
-            >
-              <FileCode2 className="h-4 w-4" />
-              <span>script.js</span>
-            </button>
-            <button
-              onClick={() => handleLanguageChange('python')}
-              className={cn(
-                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
-                language === 'python'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              )}
-            >
-              <FileCode2 className="h-4 w-4" />
-              <span>script.py</span>
-            </button>
-          </nav>
-        </ScrollArea>
+        {activeView === 'explorer' && <ExplorerPanel language={language} onLanguageChange={handleLanguageChange} />}
+        {activeView === 'source-control' && <SourceControlPanel />}
+        {activeView === 'extensions' && <ExtensionsPanel />}
       </div>
 
       {/* Main Content Area */}
