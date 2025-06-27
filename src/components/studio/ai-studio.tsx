@@ -56,6 +56,10 @@ import {
   Settings,
   HelpCircle,
   Hammer,
+  Search,
+  CaseSensitive,
+  WholeWord,
+  Regex,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -70,7 +74,7 @@ const DynamicEditor = dynamic(
   }
 );
 
-type ActiveView = 'explorer' | 'source-control' | 'extensions' | 'agent' | 'build' | 'settings' | 'help';
+type ActiveView = 'explorer' | 'search' | 'source-control' | 'extensions' | 'agent' | 'build' | 'settings' | 'help';
 type Language = 'javascript' | 'python' | 'typescript' | 'tsx' | 'json' | 'markdown' | 'html' | 'css';
 
 type ChatMessage = {
@@ -208,6 +212,53 @@ const ExplorerPanel = ({
         </>
     );
 };
+
+const SearchPanel = () => (
+  <>
+    <header className="flex h-14 items-center border-b px-4">
+      <h2 className="font-semibold text-lg tracking-tight">Search</h2>
+    </header>
+    <ScrollArea className="flex-1">
+      <div className="p-4 space-y-4">
+        <div className="relative">
+          <Input placeholder="Search" className="pr-10" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="flex items-center gap-1">
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 data-[active=true]:bg-accent">
+                            <CaseSensitive className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Match Case</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                           <WholeWord className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Match Whole Word</TooltipContent>
+                </Tooltip>
+                 <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                           <Regex className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Use Regular Expression</TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </div>
+        <div className="text-xs text-muted-foreground pt-4 border-t">
+          <p>No results found.</p>
+        </div>
+      </div>
+    </ScrollArea>
+  </>
+);
 
 const SourceControlPanel = () => (
   <>
@@ -749,6 +800,17 @@ export function AIStudio() {
             <FileCode2 className="h-6 w-6" />
           </button>
           <button 
+            onClick={() => handleActivityClick('search')}
+            className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg",
+                activeView === 'search' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            aria-label="Search"
+            title="Search"
+          >
+            <Search className="h-6 w-6" />
+          </button>
+          <button 
             onClick={() => handleActivityClick('source-control')}
             className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-lg",
@@ -832,6 +894,7 @@ export function AIStudio() {
             onCreateFolder={handleCreateFolder}
             onDelete={handleDeletePath}
             />}
+          {activeView === 'search' && <SearchPanel />}
           {activeView === 'source-control' && <SourceControlPanel />}
           {activeView === 'extensions' && <ExtensionsPanel />}
           {activeView === 'agent' && <AgentPanel />}
