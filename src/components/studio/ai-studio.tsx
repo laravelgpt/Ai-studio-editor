@@ -465,10 +465,17 @@ export function AIStudio() {
   const [activeFile, setActiveFile] = useState<string>('script.js');
   const [fileList, setFileList] = useState<string[]>([]);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(['docs/']));
+  const [terminalHistory, setTerminalHistory] = useState<string[]>([
+    'Welcome to the mock interactive terminal!',
+    "Type 'help' for a list of available commands.",
+  ]);
+  const [terminalInput, setTerminalInput] = useState('');
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const terminalInputRef = useRef<HTMLInputElement>(null);
+  const terminalEndRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
   const { toast } = useToast();
   
@@ -479,6 +486,15 @@ export function AIStudio() {
   useEffect(() => {
     scrollToBottom();
   }, [chatMessages]);
+  
+  const scrollTerminalToBottom = () => {
+    terminalEndRef.current?.scrollIntoView();
+  };
+
+  useEffect(() => {
+    scrollTerminalToBottom();
+  }, [terminalHistory]);
+
 
   const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
@@ -545,6 +561,39 @@ export function AIStudio() {
     setIsLoading(false);
   };
   
+  const handleTerminalCommand = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const command = terminalInput.trim();
+      let newHistory = [...terminalHistory, `$ ${command}`];
+
+      if (command) {
+        switch (command.toLowerCase()) {
+          case 'ls':
+            if (fileList.length > 0) {
+              newHistory.push(fileList.join('\n'));
+            } else {
+              newHistory.push('No files or folders found.');
+            }
+            break;
+          case 'help':
+            newHistory.push('Available commands: ls, help, clear, date');
+            break;
+          case 'clear':
+            newHistory = [];
+            break;
+          case 'date':
+            newHistory.push(new Date().toLocaleString());
+            break;
+          default:
+            newHistory.push(`command not found: ${command}`);
+            break;
+        }
+      }
+      setTerminalHistory(newHistory);
+      setTerminalInput('');
+    }
+  };
+
   const handleExplain = async () => {
     if (!editorRef.current) return;
     const selection = editorRef.current.getSelection();
@@ -983,7 +1032,15 @@ export function AIStudio() {
               />
             </div>
             {isOutputVisible && (
-              <Tabs defaultValue="output" className="h-64 border-t bg-card flex flex-col">
+              <Tabs
+                defaultValue="output"
+                className="h-64 border-t bg-card flex flex-col"
+                onValueChange={(value) => {
+                  if (value === 'terminal') {
+                    setTimeout(() => terminalInputRef.current?.focus(), 100);
+                  }
+                }}
+              >
                 <div className="flex items-center justify-between border-b pl-2 pr-1 shrink-0">
                   <TabsList className="bg-transparent p-0">
                     <TabsTrigger value="output" className="px-4 py-3 text-sm font-medium">Output</TabsTrigger>
@@ -998,14 +1055,31 @@ export function AIStudio() {
                     <pre className="p-4 text-sm font-code">{output.join('\n')}</pre>
                   </ScrollArea>
                 </TabsContent>
-                <TabsContent value="terminal" className="flex-1 mt-0 overflow-y-auto">
-                  <ScrollArea className="h-full">
-                    <div className="p-4 text-sm font-code bg-background h-full">
-                      <p>$ Welcome to the mock terminal!</p>
-                      <p>$ Interactive terminal coming soon.</p>
-                      <p>{'> '}</p>
+                <TabsContent
+                  value="terminal"
+                  className="flex-1 mt-0 flex flex-col"
+                  onClick={() => terminalInputRef.current?.focus()}
+                >
+                  <ScrollArea className="flex-1">
+                    <div className="p-4 text-sm font-code">
+                      {terminalHistory.map((line, index) => (
+                        <pre key={index} className="whitespace-pre-wrap leading-relaxed">{line}</pre>
+                      ))}
+                      <div ref={terminalEndRef} />
                     </div>
                   </ScrollArea>
+                  <div className="flex shrink-0 gap-2 items-center px-4 pb-2">
+                    <span className="text-accent">$</span>
+                    <input
+                        ref={terminalInputRef}
+                        type="text"
+                        value={terminalInput}
+                        onChange={(e) => setTerminalInput(e.target.value)}
+                        onKeyDown={handleTerminalCommand}
+                        className="bg-transparent border-none outline-none w-full font-code text-sm p-0"
+                        autoComplete="off"
+                    />
+                  </div>
                 </TabsContent>
               </Tabs>
             )}
