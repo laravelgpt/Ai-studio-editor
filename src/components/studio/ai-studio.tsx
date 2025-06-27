@@ -55,6 +55,7 @@ import {
   FolderPlus,
   Settings,
   HelpCircle,
+  Hammer,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -69,7 +70,7 @@ const DynamicEditor = dynamic(
   }
 );
 
-type ActiveView = 'explorer' | 'source-control' | 'extensions' | 'agent' | 'settings' | 'help';
+type ActiveView = 'explorer' | 'source-control' | 'extensions' | 'agent' | 'build' | 'settings' | 'help';
 type Language = 'javascript' | 'python' | 'typescript' | 'tsx' | 'json' | 'markdown' | 'html' | 'css';
 
 type ChatMessage = {
@@ -260,6 +261,45 @@ const ExtensionsPanel = () => (
     </ScrollArea>
   </>
 );
+
+const BuildPanel = () => (
+    <>
+      <header className="flex h-14 items-center justify-between border-b px-4">
+        <h2 className="font-semibold text-lg tracking-tight">Build & Deploy</h2>
+        <Button size="sm">
+          <Play className="mr-2 h-4 w-4" />
+          Run Build
+        </Button>
+      </header>
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
+          <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Status</h3>
+              <div className="flex items-center gap-2 text-sm p-2 rounded-md bg-muted/50">
+                  <div className="h-2.5 w-2.5 rounded-full bg-green-500"></div>
+                  <span>Ready to build</span>
+              </div>
+          </div>
+          <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Build Output</h3>
+              <div className="p-4 bg-muted/50 rounded-md font-code text-xs h-64 overflow-y-auto">
+                  <p className="text-foreground">$ npm run build</p>
+                  <p>{'>'} next build</p>
+                  <br />
+                  <p>info  - Creating an optimized production build...</p>
+                  <p>info  - Compiled successfully.</p>
+                  <p>info  - Collecting page data...</p>
+                  <p>info  - Generating static pages...</p>
+                  <p>info  - Finalizing page optimization...</p>
+                  <br />
+                  <p className="text-green-500">Build successful!</p>
+              </div>
+          </div>
+          <Button className="w-full" variant="outline" disabled>Deploy to Production</Button>
+        </div>
+      </ScrollArea>
+    </>
+  );
 
 const AgentPanel = () => (
     <>
@@ -741,6 +781,17 @@ export function AIStudio() {
           >
             <BrainCircuit className="h-6 w-6" />
           </button>
+          <button 
+            onClick={() => handleActivityClick('build')}
+            className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg",
+                activeView === 'build' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            aria-label="Build & Deploy"
+            title="Build & Deploy"
+          >
+            <Hammer className="h-6 w-6" />
+          </button>
         </div>
         <div className="flex flex-col items-center gap-y-4">
             <button
@@ -784,6 +835,7 @@ export function AIStudio() {
           {activeView === 'source-control' && <SourceControlPanel />}
           {activeView === 'extensions' && <ExtensionsPanel />}
           {activeView === 'agent' && <AgentPanel />}
+          {activeView === 'build' && <BuildPanel />}
           {activeView === 'settings' && <SettingsPanel />}
           {activeView === 'help' && <HelpPanel />}
         </div>
