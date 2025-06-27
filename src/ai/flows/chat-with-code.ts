@@ -10,7 +10,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { saveFileTool, readFileTool, listFilesTool } from '@/ai/tools/database-tools';
+import { saveFileTool, readFileTool, listFilesTool, createFolderTool, deleteFileTool, deleteFolderTool } from '@/ai/tools/database-tools';
 
 const ChatWithCodeInputSchema = z.object({
   code: z.string().describe('The code snippet the user is asking about. This is the code currently open in the editor.'),
@@ -32,16 +32,16 @@ const prompt = ai.definePrompt({
   name: 'chatWithCodePrompt',
   input: {schema: ChatWithCodeInputSchema},
   output: {schema: ChatWithCodeOutputSchema},
-  tools: [saveFileTool, readFileTool, listFilesTool],
+  tools: [saveFileTool, readFileTool, listFilesTool, createFolderTool, deleteFileTool, deleteFolderTool],
   prompt: `You are an expert AI programming assistant. A user is asking for help with the following code.
 
-You have access to a virtual file system. You can save code to a file, read a file's content, and list all available files.
-Use the provided tools to manage files when the user asks for it. For example, if the user asks "save this code to my_script.js", use the saveFile tool.
-When you save a file, use the 'code' from the input as the content to save, unless the user specifies otherwise.
+You have access to a virtual file system. You can create, read, update, and delete files and folders.
+Use the provided tools to manage the file system when the user asks for it. For example, if the user asks "create a new folder called 'styles'", use the createFolder tool with the path 'styles/'.
+When saving a file, use the 'code' from the input as the content, unless the user specifies otherwise. Folder paths MUST end with a '/'.
 
 Language: {{{language}}}
 
-Code in the editor:
+Code in the editor (path: {{{activeFile}}}):
 \`\`\`{{{language}}}
 {{{code}}}
 \`\`\`
@@ -58,7 +58,7 @@ const chatWithCodeFlow = ai.defineFlow(
     inputSchema: ChatWithCodeInputSchema,
     outputSchema: ChatWithCodeOutputSchema,
   },
-  async input => {
+  async (input) => {
     const {output} = await prompt(input);
     return output!;
   }

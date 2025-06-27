@@ -15,6 +15,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { cn } from '@/lib/utils';
 import { runJavascript } from '@/lib/code-runner';
@@ -22,7 +23,7 @@ import { explainCode } from '@/ai/flows/explain-code';
 import { fixCodeErrors } from '@/ai/flows/fix-code-errors';
 import { autoCompleteCode } from '@/ai/flows/auto-complete-code';
 import { chatWithCode } from '@/ai/flows/chat-with-code';
-import { listFiles, readFile } from '@/lib/actions';
+import { listFiles, readFile, saveFile, createFolder, deletePath } from '@/lib/actions';
 
 import {
   Play,
@@ -42,6 +43,10 @@ import {
   Puzzle,
   PanelRight,
   BrainCircuit,
+  Folder,
+  FolderOpen,
+  FilePlus,
+  FolderPlus,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -57,7 +62,8 @@ const DynamicEditor = dynamic(
 );
 
 type ActiveView = 'explorer' | 'source-control' | 'extensions' | 'agent';
-type Language = 'javascript' | 'python';
+type Language = 'javascript' | 'python' | 'typescript' | 'tsx' | 'json' | 'markdown' | 'html' | 'css';
+
 type ChatMessage = {
   role: 'user' | 'ai';
   content: string;
@@ -70,32 +76,129 @@ const initialChatMessages: ChatMessage[] = [
     }
 ]
 
-const ExplorerPanel = ({ files, activeFile, onFileSelect }: { files: string[], activeFile: string, onFileSelect: (file: string) => void }) => (
-    <>
-        <header className="flex h-14 items-center border-b px-4">
-          <h2 className="font-semibold text-lg tracking-tight">Explorer</h2>
-        </header>
-        <ScrollArea className="flex-1">
-          <nav className="grid gap-1 p-2">
-            {files.map(file => (
-                <button
-                key={file}
-                onClick={() => onFileSelect(file)}
-                className={cn(
-                    'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
-                    activeFile === file
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                )}
-                >
-                <FileCode2 className="h-4 w-4" />
-                <span>{file}</span>
-                </button>
-            ))}
-          </nav>
-        </ScrollArea>
-    </>
-);
+const getLanguageFromPath = (path: string): Language => {
+    if (path.endsWith('.js')) return 'javascript';
+    if (path.endsWith('.py')) return 'python';
+    if (path.endsWith('.ts')) return 'typescript';
+    if (path.endsWith('.tsx')) return 'tsx';
+    if (path.endsWith('.json')) return 'json';
+    if (path.endsWith('.md')) return 'markdown';
+    if (path.endsWith('.html')) return 'html';
+    if (path.endsWith('.css')) return 'css';
+    return 'javascript';
+}
+
+const ExplorerPanel = ({ 
+    files, 
+    activeFile, 
+    onFileSelect, 
+    onToggleFolder, 
+    openFolders,
+    onCreateFile,
+    onCreateFolder,
+    onDelete
+}: { 
+    files: string[], 
+    activeFile: string, 
+    onFileSelect: (file: string) => void,
+    onToggleFolder: (folder: string) => void,
+    openFolders: Set<string>,
+    onCreateFile: (path: string) => void,
+    onCreateFolder: (path: string) => void,
+    onDelete: (path: string) => void,
+}) => {
+    const renderTree = (paths: string[], level = 0) => {
+        return paths.map(path => {
+            const isFolder = path.endsWith('/');
+            const name = path.split('/').filter(Boolean).pop() || '';
+            const indent = level * 16;
+            
+            if (isFolder) {
+                const isOpen = openFolders.has(path);
+                const children = files.filter(f => f.startsWith(path) && f !== path && f.substring(path.length).split('/').length === 1);
+                
+                return (
+                    <div key={path}>
+                        <div className="group flex items-center gap-2 rounded-md hover:bg-muted/50 w-full text-left">
+                            <button
+                                onClick={() => onToggleFolder(path)}
+                                className='flex-1 flex items-center gap-2 p-2 text-sm font-medium text-muted-foreground hover:text-foreground'
+                                style={{ paddingLeft: `${indent + 8}px` }}
+                            >
+                                {isOpen ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                                <span>{name}</span>
+                            </button>
+                            <button onClick={() => onDelete(path)} className="opacity-0 group-hover:opacity-100 p-1 mr-2 rounded-md hover:bg-destructive/20 text-destructive/80 hover:text-destructive">
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                        {isOpen && (
+                            <div>
+                                {renderTree(children, level + 1)}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            return (
+                 <div key={path} className="group flex items-center gap-2 rounded-md hover:bg-muted/50 w-full text-left">
+                    <button
+                        onClick={() => onFileSelect(path)}
+                        className={cn(
+                            'flex-1 flex items-center gap-2 p-2 text-sm font-medium w-full text-left',
+                            activeFile === path
+                                ? 'bg-muted text-foreground'
+                                : 'text-muted-foreground hover:text-foreground'
+                        )}
+                        style={{ paddingLeft: `${indent + 8}px` }}
+                    >
+                        <FileCode2 className="h-4 w-4" />
+                        <span>{name}</span>
+                    </button>
+                    <button onClick={() => onDelete(path)} className="opacity-0 group-hover:opacity-100 p-1 mr-2 rounded-md hover:bg-destructive/20 text-destructive/80 hover:text-destructive">
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            );
+        });
+    };
+
+    const rootPaths = files.filter(f => !f.substring(0, f.endsWith('/') ? f.length - 1 : f.length).includes('/'));
+
+    return (
+        <>
+            <header className="flex h-14 items-center justify-between border-b px-2">
+                <h2 className="font-semibold text-lg tracking-tight px-2">Explorer</h2>
+                <div className="flex items-center gap-1">
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onCreateFile('')}>
+                                    <FilePlus className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>New File</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onCreateFolder('')}>
+                                    <FolderPlus className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>New Folder</TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
+            </header>
+            <ScrollArea className="flex-1">
+                <nav className="p-2">
+                    {renderTree(rootPaths)}
+                </nav>
+            </ScrollArea>
+        </>
+    );
+};
 
 const SourceControlPanel = () => (
   <>
@@ -158,8 +261,15 @@ const AgentPanel = () => (
       <ScrollArea className="flex-1">
         <div className="p-4 text-sm text-muted-foreground space-y-4">
           <p>This is your AI Agent panel.</p>
-          <p>You can define and run complex, multi-step workflows here.</p>
-          <p>For now, you can interact with the agent through the chat window. Try asking it to "list all files" or "save the current code to a new file named example.js".</p>
+          <p>The agent has access to a virtual file system and can perform actions like creating, reading, updating, and deleting files and folders.</p>
+          <p>Try asking the assistant:
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+                <li>"List all files and folders."</li>
+                <li>"Create a new folder called 'styles'."</li>
+                <li>"Save the current code to a new file named 'styles/main.css'."</li>
+                <li>"Delete the 'docs' folder."</li>
+            </ul>
+          </p>
           <Button className="w-full mt-4" disabled>Run Workflow (Coming Soon)</Button>
         </div>
       </ScrollArea>
@@ -178,7 +288,8 @@ export function AIStudio() {
   const [isLeftSidebarVisible, setIsLeftSidebarVisible] = useState(true);
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(true);
   const [activeFile, setActiveFile] = useState<string>('script.js');
-  const [fileList, setFileList] = useState<string[]>(['script.js', 'script.py']);
+  const [fileList, setFileList] = useState<string[]>([]);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(['docs/']));
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -200,27 +311,31 @@ export function AIStudio() {
   const refreshFileList = useCallback(async () => {
     try {
         const files = await listFiles();
-        const defaultFiles = ['script.js', 'script.py'];
-        const newFileList = [...new Set([...defaultFiles, ...files])].sort();
-        setFileList(newFileList);
+        files.sort();
+        setFileList(files);
+        return files;
     } catch (error) {
         console.error("Failed to fetch file list", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not refresh file list.' });
+        return [];
     }
   }, [toast]);
 
   const handleFileSelect = useCallback(async (fileName: string) => {
-    if (isLoading) return;
+    if (isLoading || fileName.endsWith('/')) return;
     setIsLoading(true);
-    setActiveFile(fileName);
     try {
         const content = await readFile(fileName);
-        const newLang = fileName.endsWith('.py') ? 'python' : 'javascript';
-        setLanguage(newLang);
-        setCode(content ?? '');
-        setOutput([]);
-        if (content === null) {
-             toast({ title: 'New File', description: `You can now edit ${fileName}.` });
+        if (content !== null) {
+            const newLang = getLanguageFromPath(fileName);
+            setLanguage(newLang);
+            setCode(content);
+            setActiveFile(fileName);
+            setOutput([]);
+        } else {
+             toast({ title: 'File is empty', description: `${fileName} is empty or could not be read.` });
+             setCode('');
+             setActiveFile(fileName);
         }
     } catch (error) {
         console.error(`Failed to load ${fileName}`, error);
@@ -232,21 +347,19 @@ export function AIStudio() {
 
    // Initial load
    useEffect(() => {
-    const loadInitialFile = async () => {
+    const loadInitialData = async () => {
       setIsLoading(true);
       await refreshFileList();
-      const initialContent = await readFile('script.js');
-      setCode(initialContent ?? '');
+      handleFileSelect('script.js');
       setIsLoading(false);
     };
-    loadInitialFile();
-    // We only want this to run once on mount.
+    loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRunCode = async () => {
     if (language !== 'javascript') {
-      setOutput(['Python execution is not supported in this version.']);
+      setOutput([`Execution of ${language} is not supported in this version.`]);
       return;
     }
     setIsLoading(true);
@@ -259,10 +372,10 @@ export function AIStudio() {
   const handleExplain = async () => {
     if (!editorRef.current) return;
     const selection = editorRef.current.getSelection();
-    const selectedCode = selection ? editorRef.current.getModel()?.getValueInRange(selection) : code;
+    const selectedCode = selection && !selection.isEmpty() ? editorRef.current.getModel()?.getValueInRange(selection) : code;
     
     if (!selectedCode?.trim()) {
-      toast({ title: 'No code selected', description: 'Please select a code snippet to explain.' });
+      toast({ title: 'No code selected', description: 'Please select a code snippet or have code in the editor to explain.' });
       return;
     }
     
@@ -288,7 +401,11 @@ export function AIStudio() {
     
     try {
       const result = await fixCodeErrors({ code, language });
-      setCode(result.correctedCode);
+      if (result.correctedCode !== code) {
+          setCode(result.correctedCode);
+          await saveFile(activeFile, result.correctedCode);
+          toast({title: 'Code Fixed', description: 'Errors were found and corrected.'});
+      }
       const response = result.explanation ? result.explanation : 'No errors found. The code seems correct.';
       setChatMessages(prev => [...prev, {role: 'ai', content: response}]);
     } catch (error) {
@@ -304,16 +421,11 @@ export function AIStudio() {
     setIsLoading(true);
     try {
       const result = await autoCompleteCode({ codeSnippet: code, language });
-      const currentPosition = editorRef.current.getPosition();
-      if(currentPosition){
-         editorRef.current.executeEdits('ai-autocomplete', [{
-          range: new editor.Range(currentPosition.lineNumber, currentPosition.column, currentPosition.lineNumber, currentPosition.column),
-          text: result.completedCode
-        }]);
-      } else {
-         setCode(code + result.completedCode);
-      }
-     
+      editorRef.current.executeEdits('ai-autocomplete', [{
+        range: editorRef.current.getModel()!.getFullModelRange(),
+        text: result.completedCode
+      }]);
+      await saveFile(activeFile, result.completedCode);
       toast({ title: 'Success', description: 'Code completion applied.' });
     } catch (error) {
        toast({ variant: 'destructive', title: 'Error', description: 'Failed to generate completion.' });
@@ -335,7 +447,17 @@ export function AIStudio() {
     try {
         const result = await chatWithCode({ code, language, query: newQuery });
         setChatMessages(prev => [...prev, {role: 'ai', content: result.response}]);
-        await refreshFileList();
+        const updatedFiles = await refreshFileList();
+        // If the active file was deleted, load a new one
+        if (!updatedFiles.includes(activeFile)) {
+            const newFileToOpen = updatedFiles.find(f => !f.endsWith('/')) || '';
+            if (newFileToOpen) {
+                handleFileSelect(newFileToOpen);
+            } else {
+                setActiveFile('');
+                setCode('');
+            }
+        }
     } catch (error) {
         toast({ variant: 'destructive', title: 'Error', description: 'Failed to get a response.' });
         setChatMessages(prev => [...prev, {role: 'ai', content: 'Sorry, I encountered an error.'}]);
@@ -352,6 +474,54 @@ export function AIStudio() {
       setIsLeftSidebarVisible(true);
     }
   };
+
+  const handleToggleFolder = (folderPath: string) => {
+    setOpenFolders(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(folderPath)) {
+            newSet.delete(folderPath);
+        } else {
+            newSet.add(folderPath);
+        }
+        return newSet;
+    });
+  };
+
+  const handleCreateFile = async (basePath: string) => {
+    const fileName = prompt("Enter new file name:", "new-file.js");
+    if (fileName) {
+        const fullPath = basePath + fileName;
+        await saveFile(fullPath, '');
+        await refreshFileList();
+        handleFileSelect(fullPath);
+    }
+  };
+
+  const handleCreateFolder = async (basePath: string) => {
+    const folderName = prompt("Enter new folder name:", "new-folder");
+    if (folderName) {
+        const fullPath = basePath + folderName + '/';
+        await createFolder(fullPath);
+        await refreshFileList();
+        setOpenFolders(prev => new Set(prev).add(fullPath));
+    }
+  };
+
+  const handleDeletePath = async (path: string) => {
+    if (confirm(`Are you sure you want to delete "${path}"?`)) {
+        await deletePath(path);
+        const newFiles = await refreshFileList();
+        if (path === activeFile || activeFile.startsWith(path)) {
+            const fileToOpen = newFiles.find(f => !f.endsWith('/')) || '';
+            if (fileToOpen) {
+                handleFileSelect(fileToOpen);
+            } else {
+                setActiveFile('');
+                setCode('');
+            }
+        }
+    }
+  }
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground font-sans">
@@ -406,7 +576,16 @@ export function AIStudio() {
       {/* Left Sidebar */}
       {isLeftSidebarVisible && (
         <div className="hidden w-64 border-r bg-card md:flex md:flex-col shrink-0">
-          {activeView === 'explorer' && <ExplorerPanel files={fileList} activeFile={activeFile} onFileSelect={handleFileSelect} />}
+          {activeView === 'explorer' && <ExplorerPanel 
+            files={fileList} 
+            activeFile={activeFile} 
+            onFileSelect={handleFileSelect} 
+            openFolders={openFolders}
+            onToggleFolder={handleToggleFolder}
+            onCreateFile={handleCreateFile}
+            onCreateFolder={handleCreateFolder}
+            onDelete={handleDeletePath}
+            />}
           {activeView === 'source-control' && <SourceControlPanel />}
           {activeView === 'extensions' && <ExtensionsPanel />}
           {activeView === 'agent' && <AgentPanel />}
