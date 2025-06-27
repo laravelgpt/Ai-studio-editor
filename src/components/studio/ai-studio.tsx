@@ -40,6 +40,7 @@ import {
   Terminal,
   CloudCog,
   Zap,
+  MessageSquareText,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -61,6 +62,7 @@ type LoadingStates = {
   autocomplete?: boolean;
   run?: boolean;
 };
+type SidebarView = 'tools' | 'assistant';
 
 const defaultCode: Record<Language, string> = {
   javascript: `// Welcome to AI Studio!
@@ -100,6 +102,7 @@ export function AIStudio() {
   const [explanation, setExplanation] = useState<string>('');
   const [isOutputVisible, setIsOutputVisible] = useState(true);
   const [loading, setLoading] = useState<LoadingStates>({});
+  const [sidebarView, setSidebarView] = useState<SidebarView>('tools');
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const { theme } = useTheme();
@@ -140,6 +143,7 @@ export function AIStudio() {
     
     setLoading({ explain: true });
     setExplanation('Analyzing code...');
+    setSidebarView('assistant');
     try {
       const result = await explainCode({ code: selectedCode, language });
       setExplanation(result.explanation);
@@ -155,6 +159,7 @@ export function AIStudio() {
     if (!editorRef.current) return;
     setLoading({ fix: true });
     setExplanation('Fixing errors...');
+    setSidebarView('assistant');
     try {
       const result = await fixCodeErrors({ code, language });
       setCode(result.correctedCode);
@@ -175,6 +180,7 @@ export function AIStudio() {
     if (!editorRef.current) return;
     setLoading({ autocomplete: true });
     setExplanation('Generating completion...');
+    setSidebarView('assistant');
     try {
       const result = await autoCompleteCode({ codeSnippet: code, language });
       const currentPosition = editorRef.current.getPosition();
@@ -199,66 +205,92 @@ export function AIStudio() {
   return (
     <TooltipProvider delayDuration={100}>
       <div className="flex h-screen w-screen bg-background text-foreground font-sans">
+        {/* Activity Bar */}
+        <div className="flex flex-col items-center justify-between w-16 bg-card p-2 border-r shrink-0">
+            <div className="flex flex-col items-center gap-2">
+                <Bot className="h-8 w-8 text-primary mb-2" />
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant={sidebarView === 'tools' ? 'secondary' : 'ghost'} size="icon" className="h-12 w-12" onClick={() => setSidebarView('tools')}>
+                            <Sparkles className="h-6 w-6" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right"><p>AI Tools</p></TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant={sidebarView === 'assistant' ? 'secondary' : 'ghost'} size="icon" className="h-12 w-12" onClick={() => setSidebarView('assistant')}>
+                            <MessageSquareText className="h-6 w-6" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right"><p>AI Assistant</p></TooltipContent>
+                </Tooltip>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+                <ThemeToggle />
+            </div>
+        </div>
+
         {/* Sidebar */}
-        <aside className="flex flex-col w-72 border-r bg-card p-4 gap-4">
-          <header className="flex items-center gap-2">
-            <Bot className="h-7 w-7 text-primary" />
-            <h1 className="text-xl font-bold tracking-tight">AI Studio</h1>
+        <aside className="w-72 border-r bg-card flex flex-col shrink-0">
+          <header className="p-4 border-b">
+              <h1 className="text-lg font-semibold tracking-tight">
+                  {sidebarView === 'tools' ? 'Tools' : 'AI Assistant'}
+              </h1>
           </header>
-          <Separator />
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-muted-foreground">Language</label>
-            <Select onValueChange={handleLanguageChange} value={language}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select language" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="javascript">JavaScript</SelectItem>
-                <SelectItem value="python">Python</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-muted-foreground">AI Tools</h2>
-            <Button onClick={handleExplain} disabled={!!loading.explain || !!loading.fix} className="justify-start">
-              {loading.explain ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              Explain Code
-            </Button>
-            <Button onClick={handleFixErrors} disabled={!!loading.fix || !!loading.explain} className="justify-start">
-               {loading.fix ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-              Fix Errors
-            </Button>
-            <Button onClick={handleAutoComplete} disabled={!!loading.autocomplete} className="justify-start">
-              {loading.autocomplete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
-              Auto-Complete
-            </Button>
-          </div>
-          <Separator />
-          <Card className="flex-1 overflow-hidden">
-            <CardHeader className="p-4">
-              <CardTitle className="text-base">AI Assistant</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-0 h-full">
-              <ScrollArea className="h-full pr-3">
-                <p className="text-sm whitespace-pre-wrap font-code">
-                  {explanation || 'Select an AI tool to get started.'}
-                </p>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-          <div className="mt-auto flex flex-col gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" className="justify-start" disabled>
-                  <CloudCog className="mr-2 h-4 w-4" />
-                  Connect to Mcp-server
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>Coming Soon!</p>
-              </TooltipContent>
-            </Tooltip>
-            <ThemeToggle />
+          <div className="flex-1 overflow-y-auto">
+            {sidebarView === 'tools' && (
+                <div className="p-4 flex flex-col gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-muted-foreground">Language</label>
+                    <Select onValueChange={handleLanguageChange} value={language}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="javascript">JavaScript</SelectItem>
+                        <SelectItem value="python">Python</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <h2 className="text-sm font-medium text-muted-foreground">AI Tools</h2>
+                    <Button onClick={handleExplain} disabled={!!loading.explain || !!loading.fix} className="justify-start">
+                      {loading.explain ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                      Explain Code
+                    </Button>
+                    <Button onClick={handleFixErrors} disabled={!!loading.fix || !!loading.explain} className="justify-start">
+                      {loading.fix ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                      Fix Errors
+                    </Button>
+                    <Button onClick={handleAutoComplete} disabled={!!loading.autocomplete} className="justify-start">
+                      {loading.autocomplete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
+                      Auto-Complete
+                    </Button>
+                  </div>
+                  <Separator />
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" className="justify-start" disabled>
+                          <CloudCog className="mr-2 h-4 w-4" />
+                          Connect to Mcp-server
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Coming Soon!</p>
+                      </TooltipContent>
+                    </Tooltip>
+                </div>
+            )}
+            {sidebarView === 'assistant' && (
+                <div className="p-4 h-full">
+                    <ScrollArea className="h-full pr-3">
+                        <p className="text-sm whitespace-pre-wrap font-code">
+                        {explanation || 'The AI assistant\'s responses will appear here.'}
+                        </p>
+                    </ScrollArea>
+                </div>
+            )}
           </div>
         </aside>
 
