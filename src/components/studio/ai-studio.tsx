@@ -22,6 +22,7 @@ import { explainCode } from '@/ai/flows/explain-code';
 import { fixCodeErrors } from '@/ai/flows/fix-code-errors';
 import { autoCompleteCode } from '@/ai/flows/auto-complete-code';
 import { chatWithCode } from '@/ai/flows/chat-with-code';
+import { listFiles, readFile } from '@/lib/actions';
 
 import {
   Play,
@@ -40,6 +41,7 @@ import {
   GitBranch,
   Puzzle,
   PanelRight,
+  BrainCircuit,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -54,42 +56,11 @@ const DynamicEditor = dynamic(
   }
 );
 
-type ActiveView = 'explorer' | 'source-control' | 'extensions';
+type ActiveView = 'explorer' | 'source-control' | 'extensions' | 'agent';
 type Language = 'javascript' | 'python';
 type ChatMessage = {
   role: 'user' | 'ai';
   content: string;
-};
-
-const defaultCode: Record<Language, string> = {
-  javascript: `// Welcome to AI Studio!
-// You can write and execute JavaScript code.
-// Use the AI tools in the panel on the right to boost your productivity.
-
-function factorial(n) {
-  if (n === 0) {
-    return 1;
-  }
-  return n * factorial(n - 1);
-}
-
-const num = 5;
-console.log(\`The factorial of \${num} is \${factorial(num)}\`);
-
-// Try selecting a piece of code and clicking "Explain"
-// Or introduce an error and click "Fix"
-`,
-  python: `# Welcome to AI Studio!
-# Python execution is not yet supported in the browser.
-
-def fibonacci(n):
-    a, b = 0, 1
-    for _ in range(n):
-        print(a, end=' ')
-        a, b = b, a + b
-
-fibonacci(10)
-`,
 };
 
 const initialChatMessages: ChatMessage[] = [
@@ -99,37 +70,28 @@ const initialChatMessages: ChatMessage[] = [
     }
 ]
 
-const ExplorerPanel = ({ language, onLanguageChange }: { language: Language, onLanguageChange: (lang: Language) => void }) => (
+const ExplorerPanel = ({ files, activeFile, onFileSelect }: { files: string[], activeFile: string, onFileSelect: (file: string) => void }) => (
     <>
         <header className="flex h-14 items-center border-b px-4">
           <h2 className="font-semibold text-lg tracking-tight">Explorer</h2>
         </header>
         <ScrollArea className="flex-1">
           <nav className="grid gap-1 p-2">
-            <button
-              onClick={() => onLanguageChange('javascript')}
-              className={cn(
-                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
-                language === 'javascript'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              )}
-            >
-              <FileCode2 className="h-4 w-4" />
-              <span>script.js</span>
-            </button>
-            <button
-              onClick={() => onLanguageChange('python')}
-              className={cn(
-                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
-                language === 'python'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              )}
-            >
-              <FileCode2 className="h-4 w-4" />
-              <span>script.py</span>
-            </button>
+            {files.map(file => (
+                <button
+                key={file}
+                onClick={() => onFileSelect(file)}
+                className={cn(
+                    'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
+                    activeFile === file
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                )}
+                >
+                <FileCode2 className="h-4 w-4" />
+                <span>{file}</span>
+                </button>
+            ))}
           </nav>
         </ScrollArea>
     </>
@@ -188,9 +150,24 @@ const ExtensionsPanel = () => (
   </>
 );
 
+const AgentPanel = () => (
+    <>
+      <header className="flex h-14 items-center border-b px-4">
+        <h2 className="font-semibold text-lg tracking-tight">AI Agent</h2>
+      </header>
+      <ScrollArea className="flex-1">
+        <div className="p-4 text-sm text-muted-foreground space-y-4">
+          <p>This is your AI Agent panel.</p>
+          <p>You can define and run complex, multi-step workflows here.</p>
+          <p>For now, you can interact with the agent through the chat window. Try asking it to "list all files" or "save the current code to a new file named example.js".</p>
+          <Button className="w-full mt-4" disabled>Run Workflow (Coming Soon)</Button>
+        </div>
+      </ScrollArea>
+    </>
+  );
 
 export function AIStudio() {
-  const [code, setCode] = useState<string>(defaultCode.javascript);
+  const [code, setCode] = useState<string>('');
   const [language, setLanguage] = useState<Language>('javascript');
   const [output, setOutput] = useState<string[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialChatMessages);
@@ -200,7 +177,8 @@ export function AIStudio() {
   const [activeView, setActiveView] = useState<ActiveView>('explorer');
   const [isLeftSidebarVisible, setIsLeftSidebarVisible] = useState(true);
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(true);
-
+  const [activeFile, setActiveFile] = useState<string>('script.js');
+  const [fileList, setFileList] = useState<string[]>(['script.js', 'script.py']);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -219,12 +197,52 @@ export function AIStudio() {
     editorRef.current = editor;
   };
 
-  const handleLanguageChange = (value: Language) => {
-    setLanguage(value);
-    setCode(defaultCode[value]);
-    setOutput([]);
-    setChatMessages(initialChatMessages);
-  };
+  const refreshFileList = useCallback(async () => {
+    try {
+        const files = await listFiles();
+        const defaultFiles = ['script.js', 'script.py'];
+        const newFileList = [...new Set([...defaultFiles, ...files])].sort();
+        setFileList(newFileList);
+    } catch (error) {
+        console.error("Failed to fetch file list", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not refresh file list.' });
+    }
+  }, [toast]);
+
+  const handleFileSelect = useCallback(async (fileName: string) => {
+    if (isLoading) return;
+    setIsLoading(true);
+    setActiveFile(fileName);
+    try {
+        const content = await readFile(fileName);
+        const newLang = fileName.endsWith('.py') ? 'python' : 'javascript';
+        setLanguage(newLang);
+        setCode(content ?? '');
+        setOutput([]);
+        if (content === null) {
+             toast({ title: 'New File', description: `You can now edit ${fileName}.` });
+        }
+    } catch (error) {
+        console.error(`Failed to load ${fileName}`, error);
+        toast({ variant: 'destructive', title: 'Error', description: `Failed to load ${fileName}` });
+    } finally {
+        setIsLoading(false);
+    }
+  }, [isLoading, toast]);
+
+   // Initial load
+   useEffect(() => {
+    const loadInitialFile = async () => {
+      setIsLoading(true);
+      await refreshFileList();
+      const initialContent = await readFile('script.js');
+      setCode(initialContent ?? '');
+      setIsLoading(false);
+    };
+    loadInitialFile();
+    // We only want this to run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRunCode = async () => {
     if (language !== 'javascript') {
@@ -317,6 +335,7 @@ export function AIStudio() {
     try {
         const result = await chatWithCode({ code, language, query: newQuery });
         setChatMessages(prev => [...prev, {role: 'ai', content: result.response}]);
+        await refreshFileList();
     } catch (error) {
         toast({ variant: 'destructive', title: 'Error', description: 'Failed to get a response.' });
         setChatMessages(prev => [...prev, {role: 'ai', content: 'Sorry, I encountered an error.'}]);
@@ -371,14 +390,26 @@ export function AIStudio() {
         >
           <Puzzle className="h-6 w-6" />
         </button>
+        <button 
+          onClick={() => handleActivityClick('agent')}
+          className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-lg",
+              activeView === 'agent' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+          )}
+          aria-label="AI Agent"
+          title="AI Agent"
+        >
+          <BrainCircuit className="h-6 w-6" />
+        </button>
       </div>
       
       {/* Left Sidebar */}
       {isLeftSidebarVisible && (
         <div className="hidden w-64 border-r bg-card md:flex md:flex-col shrink-0">
-          {activeView === 'explorer' && <ExplorerPanel language={language} onLanguageChange={handleLanguageChange} />}
+          {activeView === 'explorer' && <ExplorerPanel files={fileList} activeFile={activeFile} onFileSelect={handleFileSelect} />}
           {activeView === 'source-control' && <SourceControlPanel />}
           {activeView === 'extensions' && <ExtensionsPanel />}
+          {activeView === 'agent' && <AgentPanel />}
         </div>
       )}
 
@@ -454,6 +485,7 @@ export function AIStudio() {
               <span>main</span>
           </div>
           <div className="flex items-center gap-4">
+            <span>{activeFile}</span>
             <span className='capitalize'>{language}</span>
             <span>UTF-8</span>
           </div>

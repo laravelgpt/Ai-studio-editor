@@ -10,9 +10,10 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { saveFileTool, readFileTool, listFilesTool } from '@/ai/tools/database-tools';
 
 const ChatWithCodeInputSchema = z.object({
-  code: z.string().describe('The code snippet the user is asking about.'),
+  code: z.string().describe('The code snippet the user is asking about. This is the code currently open in the editor.'),
   language: z.string().describe('The programming language of the code snippet.'),
   query: z.string().describe('The user\'s question or prompt.'),
 });
@@ -31,11 +32,16 @@ const prompt = ai.definePrompt({
   name: 'chatWithCodePrompt',
   input: {schema: ChatWithCodeInputSchema},
   output: {schema: ChatWithCodeOutputSchema},
+  tools: [saveFileTool, readFileTool, listFilesTool],
   prompt: `You are an expert AI programming assistant. A user is asking for help with the following code.
+
+You have access to a virtual file system. You can save code to a file, read a file's content, and list all available files.
+Use the provided tools to manage files when the user asks for it. For example, if the user asks "save this code to my_script.js", use the saveFile tool.
+When you save a file, use the 'code' from the input as the content to save, unless the user specifies otherwise.
 
 Language: {{{language}}}
 
-Code:
+Code in the editor:
 \`\`\`{{{language}}}
 {{{code}}}
 \`\`\`
