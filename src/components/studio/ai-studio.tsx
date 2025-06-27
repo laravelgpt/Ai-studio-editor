@@ -18,6 +18,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarTrigger, MenubarShortcut } from '@/components/ui/menubar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+
 
 import { cn } from '@/lib/utils';
 import { runJavascript } from '@/lib/code-runner';
@@ -49,6 +53,8 @@ import {
   FolderOpen,
   FilePlus,
   FolderPlus,
+  Settings,
+  HelpCircle,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -63,7 +69,7 @@ const DynamicEditor = dynamic(
   }
 );
 
-type ActiveView = 'explorer' | 'source-control' | 'extensions' | 'agent';
+type ActiveView = 'explorer' | 'source-control' | 'extensions' | 'agent' | 'settings' | 'help';
 type Language = 'javascript' | 'python' | 'typescript' | 'tsx' | 'json' | 'markdown' | 'html' | 'css';
 
 type ChatMessage = {
@@ -273,6 +279,82 @@ const AgentPanel = () => (
             </ul>
           </p>
           <Button className="w-full mt-4" disabled>Run Workflow (Coming Soon)</Button>
+        </div>
+      </ScrollArea>
+    </>
+  );
+
+const SettingsPanel = () => (
+  <>
+    <header className="flex h-14 items-center border-b px-4">
+      <h2 className="font-semibold text-lg tracking-tight">Settings</h2>
+    </header>
+    <ScrollArea className="flex-1">
+      <div className="p-4">
+        <Tabs defaultValue="user">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="user">User</TabsTrigger>
+            <TabsTrigger value="workspace">Workspace</TabsTrigger>
+          </TabsList>
+          <TabsContent value="user" className="mt-6 space-y-6">
+            <h3 className="text-md font-medium">Appearance</h3>
+            <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
+              <div className="space-y-0.5">
+                <Label>Theme</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select your preferred color theme.
+                </p>
+              </div>
+              <ThemeToggle />
+            </div>
+             <h3 className="text-md font-medium">Editor</h3>
+             <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
+              <div className="space-y-0.5">
+                <Label htmlFor="autosave">Auto Save</Label>
+                <p className="text-xs text-muted-foreground">
+                  Automatically save files after a delay.
+                </p>
+              </div>
+              <Switch id="autosave" defaultChecked />
+            </div>
+          </TabsContent>
+          <TabsContent value="workspace" className="mt-6 space-y-6">
+            <h3 className="text-md font-medium">Editor</h3>
+            <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
+              <div className="space-y-0.5">
+                <Label htmlFor="tabsize">Tab Size</Label>
+                 <p className="text-xs text-muted-foreground">
+                  The number of spaces a tab is equal to.
+                </p>
+              </div>
+              <Input id="tabsize" type="number" defaultValue="2" className="w-20" />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </ScrollArea>
+  </>
+);
+
+const HelpPanel = () => (
+    <>
+      <header className="flex h-14 items-center border-b px-4">
+        <h2 className="font-semibold text-lg tracking-tight">Help</h2>
+      </header>
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-6">
+            <Input placeholder="Search documentation..."/>
+            <div>
+                <h3 className="text-md font-medium mb-3">Keyboard Shortcuts</h3>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                    <div className="flex justify-between items-center"><span>Toggle Primary Side Bar</span> <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500">Ctrl+B</kbd></div>
+                    <div className="flex justify-between items-center"><span>Run Code</span> <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500">F5</kbd></div>
+                </div>
+            </div>
+             <div>
+                <h3 className="text-md font-medium mb-3">Support</h3>
+                <Button variant="outline" className="w-full">Contact Support</Button>
+            </div>
         </div>
       </ScrollArea>
     </>
@@ -604,55 +686,86 @@ export function AIStudio() {
     }
   };
 
+  const handleHelpMenuClick = () => {
+    setActiveView('help');
+    setIsLeftSidebarVisible(true);
+  };
+
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground font-sans">
       {/* Activity Bar */}
-      <div className="flex w-16 flex-col items-center gap-y-4 border-r bg-card py-4">
-        <button 
-          onClick={() => handleActivityClick('explorer')}
-          className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg",
-              activeView === 'explorer' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-          )}
-          aria-label="Files"
-          title="Files"
-        >
-          <FileCode2 className="h-6 w-6" />
-        </button>
-        <button 
-          onClick={() => handleActivityClick('source-control')}
-          className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg",
-              activeView === 'source-control' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-          )}
-          aria-label="Source Control"
-          title="Source Control"
-        >
-          <GitBranch className="h-6 w-6" />
-        </button>
-        <button 
-          onClick={() => handleActivityClick('extensions')}
-          className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg",
-              activeView === 'extensions' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-          )}
-          aria-label="Extensions"
-          title="Extensions"
-        >
-          <Puzzle className="h-6 w-6" />
-        </button>
-        <button 
-          onClick={() => handleActivityClick('agent')}
-          className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg",
-              activeView === 'agent' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-          )}
-          aria-label="AI Agent"
-          title="AI Agent"
-        >
-          <BrainCircuit className="h-6 w-6" />
-        </button>
+      <div className="flex w-16 flex-col justify-between items-center gap-y-4 border-r bg-card py-4">
+        <div className="flex flex-col items-center gap-y-4">
+          <button 
+            onClick={() => handleActivityClick('explorer')}
+            className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg",
+                activeView === 'explorer' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            aria-label="Files"
+            title="Files"
+          >
+            <FileCode2 className="h-6 w-6" />
+          </button>
+          <button 
+            onClick={() => handleActivityClick('source-control')}
+            className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg",
+                activeView === 'source-control' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            aria-label="Source Control"
+            title="Source Control"
+          >
+            <GitBranch className="h-6 w-6" />
+          </button>
+          <button 
+            onClick={() => handleActivityClick('extensions')}
+            className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg",
+                activeView === 'extensions' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            aria-label="Extensions"
+            title="Extensions"
+          >
+            <Puzzle className="h-6 w-6" />
+          </button>
+          <button 
+            onClick={() => handleActivityClick('agent')}
+            className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg",
+                activeView === 'agent' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+            aria-label="AI Agent"
+            title="AI Agent"
+          >
+            <BrainCircuit className="h-6 w-6" />
+          </button>
+        </div>
+        <div className="flex flex-col items-center gap-y-4">
+            <button
+                onClick={() => handleActivityClick('settings')}
+                className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-lg",
+                    activeView === 'settings' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+                )}
+                aria-label="Settings"
+                title="Settings"
+            >
+                <Settings className="h-6 w-6" />
+            </button>
+            <button
+                onClick={() => handleActivityClick('help')}
+                className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-lg",
+                    activeView === 'help' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+                )}
+                aria-label="Help"
+                title="Help"
+            >
+                <HelpCircle className="h-6 w-6" />
+            </button>
+        </div>
       </div>
       
       {/* Left Sidebar */}
@@ -671,6 +784,8 @@ export function AIStudio() {
           {activeView === 'source-control' && <SourceControlPanel />}
           {activeView === 'extensions' && <ExtensionsPanel />}
           {activeView === 'agent' && <AgentPanel />}
+          {activeView === 'settings' && <SettingsPanel />}
+          {activeView === 'help' && <HelpPanel />}
         </div>
       )}
 
@@ -705,6 +820,12 @@ export function AIStudio() {
                 <MenubarTrigger>Run</MenubarTrigger>
                 <MenubarContent>
                     <MenubarItem onClick={handleRunCode}>Run Code <MenubarShortcut>F5</MenubarShortcut></MenubarItem>
+                </MenubarContent>
+            </MenubarMenu>
+            <MenubarMenu>
+                <MenubarTrigger>Help</MenubarTrigger>
+                <MenubarContent>
+                    <MenubarItem onClick={handleHelpMenuClick}>Help / Docs</MenubarItem>
                 </MenubarContent>
             </MenubarMenu>
         </Menubar>
