@@ -567,26 +567,32 @@ export function AIStudio() {
       let newHistory = [...terminalHistory, `$ ${command}`];
 
       if (command) {
-        switch (command.toLowerCase()) {
-          case 'ls':
+        const lowerCaseCommand = command.toLowerCase();
+        const parts = command.split(' ');
+        
+        if (lowerCaseCommand === 'ls') {
             if (fileList.length > 0) {
               newHistory.push(fileList.join('\n'));
             } else {
               newHistory.push('No files or folders found.');
             }
-            break;
-          case 'help':
-            newHistory.push('Available commands: ls, help, clear, date');
-            break;
-          case 'clear':
+        } else if (lowerCaseCommand === 'help') {
+            newHistory.push("Available commands: ls, help, clear, date, npm install <package>");
+        } else if (lowerCaseCommand === 'clear') {
             newHistory = [];
-            break;
-          case 'date':
+        } else if (lowerCaseCommand === 'date') {
             newHistory.push(new Date().toLocaleString());
-            break;
-          default:
+        } else if (lowerCaseCommand.startsWith('npm install')) {
+            if (parts.length > 2) {
+                const packageName = parts.slice(2).join(' ');
+                newHistory.push(`Simulating installation of ${packageName}...`);
+                newHistory.push(`+ ${packageName}`);
+                newHistory.push(`\nInstallation complete. Note: This is a simulation. To add a package permanently, ask the AI to add it to package.json.`);
+            } else {
+                newHistory.push('Usage: npm install <package-name>');
+            }
+        } else {
             newHistory.push(`command not found: ${command}`);
-            break;
         }
       }
       setTerminalHistory(newHistory);
