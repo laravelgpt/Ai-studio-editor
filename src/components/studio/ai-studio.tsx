@@ -8,19 +8,13 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
+import { cn } from '@/lib/utils';
 import { runJavascript } from '@/lib/code-runner';
 import { explainCode } from '@/ai/flows/explain-code';
 import { fixCodeErrors } from '@/ai/flows/fix-code-errors';
@@ -40,6 +34,7 @@ import {
   User,
   Send,
   Trash2,
+  FileCode2,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -230,6 +225,41 @@ export function AIStudio() {
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground font-sans">
+      {/* Left Sidebar */}
+      <div className="hidden w-64 border-r bg-card md:flex md:flex-col shrink-0">
+        <header className="flex h-14 items-center border-b px-4">
+          <h2 className="font-semibold text-lg tracking-tight">Explorer</h2>
+        </header>
+        <ScrollArea className="flex-1">
+          <nav className="grid gap-1 p-2">
+            <button
+              onClick={() => handleLanguageChange('javascript')}
+              className={cn(
+                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
+                language === 'javascript'
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              )}
+            >
+              <FileCode2 className="h-4 w-4" />
+              <span>script.js</span>
+            </button>
+            <button
+              onClick={() => handleLanguageChange('python')}
+              className={cn(
+                'flex items-center gap-2 rounded-md p-2 text-sm font-medium w-full text-left',
+                language === 'python'
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              )}
+            >
+              <FileCode2 className="h-4 w-4" />
+              <span>script.py</span>
+            </button>
+          </nav>
+        </ScrollArea>
+      </div>
+
       {/* Main Content */}
       <main className="flex-1 flex flex-col">
         {/* Top Bar */}
@@ -238,18 +268,6 @@ export function AIStudio() {
                 <div className="flex items-center gap-2">
                     <Bot className="h-6 w-6 text-primary" />
                     <h1 className="text-lg font-semibold tracking-tight">AI Studio</h1>
-                </div>
-                <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-muted-foreground">Language</label>
-                    <Select onValueChange={handleLanguageChange} value={language}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue placeholder="Select language" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="javascript">JavaScript</SelectItem>
-                        <SelectItem value="python">Python</SelectItem>
-                      </SelectContent>
-                    </Select>
                 </div>
             </div>
             <div className="flex items-center gap-2">
