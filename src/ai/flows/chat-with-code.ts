@@ -11,14 +11,14 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const ChatWithCodeInputSchema = z.object({
+const ChatWithCodeInputSchema = z.object({
   code: z.string().describe('The code snippet the user is asking about.'),
   language: z.string().describe('The programming language of the code snippet.'),
   query: z.string().describe('The user\'s question or prompt.'),
 });
 export type ChatWithCodeInput = z.infer<typeof ChatWithCodeInputSchema>;
 
-export const ChatWithCodeOutputSchema = z.object({
+const ChatWithCodeOutputSchema = z.object({
   response: z.string().describe('The AI\'s response to the user\'s query.'),
 });
 export type ChatWithCodeOutput = z.infer<typeof ChatWithCodeOutputSchema>;
