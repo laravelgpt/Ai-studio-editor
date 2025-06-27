@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -35,6 +36,7 @@ import {
   Send,
   Trash2,
   FileCode2,
+  GitBranch,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -225,7 +227,18 @@ export function AIStudio() {
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground font-sans">
-      {/* Left Sidebar */}
+      {/* Activity Bar */}
+      <div className="flex w-16 flex-col items-center gap-y-4 border-r bg-card py-4">
+        <button 
+          className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+          aria-label="Files"
+          title="Files"
+        >
+          <FileCode2 className="h-6 w-6" />
+        </button>
+      </div>
+      
+      {/* Left Sidebar (Explorer) */}
       <div className="hidden w-64 border-r bg-card md:flex md:flex-col shrink-0">
         <header className="flex h-14 items-center border-b px-4">
           <h2 className="font-semibold text-lg tracking-tight">Explorer</h2>
@@ -260,67 +273,81 @@ export function AIStudio() {
         </ScrollArea>
       </div>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <header className="flex h-14 items-center justify-between border-b px-4 gap-4">
-            <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                    <Bot className="h-6 w-6 text-primary" />
-                    <h1 className="text-lg font-semibold tracking-tight">AI Studio</h1>
-                </div>
-            </div>
-            <div className="flex items-center gap-2">
-                <ThemeToggle />
-                <Button onClick={handleRunCode} disabled={isLoading}>
-                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                    Run
-                </Button>
-            </div>
-        </header>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col">
+          {/* Top Bar */}
+          <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 gap-4">
+              <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                      <Bot className="h-6 w-6 text-primary" />
+                      <h1 className="text-lg font-semibold tracking-tight">AI Studio</h1>
+                  </div>
+              </div>
+              <div className="flex items-center gap-2">
+                  <ThemeToggle />
+                  <Button onClick={handleRunCode} disabled={isLoading}>
+                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                      Run
+                  </Button>
+              </div>
+          </header>
 
-        {/* Editor and Output */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 relative">
-            <DynamicEditor
-              language={language}
-              value={code}
-              onChange={(value) => setCode(value || '')}
-              onMount={handleEditorDidMount}
-              theme={theme === 'dark' ? 'vs-dark' : 'light'}
-            />
-          </div>
-          {isOutputVisible && (
-            <div className="h-64 border-t bg-card">
-              <header className="flex h-12 items-center justify-between border-b px-4">
-                <div className="flex items-center gap-2">
+          {/* Editor and Output */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 relative">
+              <DynamicEditor
+                language={language}
+                value={code}
+                onChange={(value) => setCode(value || '')}
+                onMount={handleEditorDidMount}
+                theme={theme === 'dark' ? 'vs-dark' : 'light'}
+              />
+            </div>
+            {isOutputVisible && (
+              <div className="h-64 border-t bg-card">
+                <header className="flex h-12 items-center justify-between border-b px-4">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="h-5 w-5" />
+                    <h2 className="font-medium">Output</h2>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(false)}>
+                    <ChevronDown className="h-5 w-5" />
+                  </Button>
+                </header>
+                <ScrollArea className="h-[calc(16rem-3rem)]">
+                  <pre className="p-4 text-sm font-code">{output.join('\n')}</pre>
+                </ScrollArea>
+              </div>
+            )}
+            {!isOutputVisible && (
+              <header className="flex h-12 items-center justify-between border-t px-4">
+                  <div className="flex items-center gap-2">
                   <Terminal className="h-5 w-5" />
                   <h2 className="font-medium">Output</h2>
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(false)}>
-                  <ChevronDown className="h-5 w-5" />
+                  </div>
+                <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(true)}>
+                  <ChevronUp className="h-5 w-5" />
                 </Button>
               </header>
-              <ScrollArea className="h-[calc(16rem-3rem)]">
-                <pre className="p-4 text-sm font-code">{output.join('\n')}</pre>
-              </ScrollArea>
-            </div>
-          )}
-          {!isOutputVisible && (
-            <header className="flex h-12 items-center justify-between border-t px-4">
-                <div className="flex items-center gap-2">
-                <Terminal className="h-5 w-5" />
-                <h2 className="font-medium">Output</h2>
-                </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(true)}>
-                <ChevronUp className="h-5 w-5" />
-              </Button>
-            </header>
-          )}
-        </div>
-      </main>
+            )}
+          </div>
+        </main>
+        
+        {/* Status Bar */}
+        <footer className="flex h-8 shrink-0 items-center justify-between border-t bg-card px-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4" />
+              <span>main</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className='capitalize'>{language}</span>
+            <span>UTF-8</span>
+          </div>
+        </footer>
+      </div>
 
-      {/* Sidebar */}
+      {/* Right Sidebar (AI Assistant) */}
       <aside className="w-96 border-l bg-card flex flex-col shrink-0">
         <header className="p-4 border-b flex items-center justify-between h-14">
             <h1 className="text-lg font-semibold tracking-tight">AI Assistant</h1>
