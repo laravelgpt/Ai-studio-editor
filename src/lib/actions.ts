@@ -5,7 +5,9 @@ import {
     readFile as readDbFile, 
     saveFile as saveDbFile, 
     createFolder as createDbFolder, 
-    deletePath as deleteDbPath 
+    deletePath as deleteDbPath,
+    getAllFilesAsObject,
+    replaceFileSystem
 } from '@/lib/mock-db';
 
 export async function listFiles(): Promise<string[]> {
@@ -26,4 +28,12 @@ export async function createFolder(path: string): Promise<void> {
 
 export async function deletePath(path: string): Promise<void> {
     deleteDbPath(path);
+}
+
+export async function getProjectFiles(): Promise<Record<string, string | null>> {
+    return getAllFilesAsObject();
+}
+
+export async function importProjectFiles(files: Record<string, string | null>): Promise<void> {
+    replaceFileSystem(files);
 }

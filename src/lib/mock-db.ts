@@ -79,3 +79,14 @@ export function deletePath(path: string): void {
 export function listFiles(): string[] {
   return Array.from(fileStore.keys());
 }
+
+export function getAllFilesAsObject(): Record<string, string | null> {
+    return Object.fromEntries(fileStore);
+}
+
+export function replaceFileSystem(files: Record<string, string | null>): void {
+    fileStore.clear();
+    for (const [path, content] of Object.entries(files)) {
+        fileStore.set(path, content);
+    }
+}

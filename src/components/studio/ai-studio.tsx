@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import JSZip from 'jszip';
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarTrigger, MenubarShortcut } from '@/components/ui/menubar';
 
 import { cn } from '@/lib/utils';
 import { runJavascript } from '@/lib/code-runner';
@@ -23,7 +25,7 @@ import { explainCode } from '@/ai/flows/explain-code';
 import { fixCodeErrors } from '@/ai/flows/fix-code-errors';
 import { autoCompleteCode } from '@/ai/flows/auto-complete-code';
 import { chatWithCode } from '@/ai/flows/chat-with-code';
-import { listFiles, readFile, saveFile, createFolder, deletePath } from '@/lib/actions';
+import { listFiles, readFile, saveFile, createFolder, deletePath, getProjectFiles, importProjectFiles } from '@/lib/actions';
 
 import {
   Play,
@@ -293,6 +295,7 @@ export function AIStudio() {
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const { theme } = useTheme();
   const { toast } = useToast();
   
@@ -490,7 +493,7 @@ export function AIStudio() {
   const handleCreateFile = async (basePath: string) => {
     const fileName = prompt("Enter new file name:", "new-file.js");
     if (fileName) {
-        const fullPath = basePath + fileName;
+        const fullPath = basePath ? `${basePath}${fileName}` : fileName;
         await saveFile(fullPath, '');
         await refreshFileList();
         handleFileSelect(fullPath);
@@ -500,7 +503,7 @@ export function AIStudio() {
   const handleCreateFolder = async (basePath: string) => {
     const folderName = prompt("Enter new folder name:", "new-folder");
     if (folderName) {
-        const fullPath = basePath + folderName + '/';
+        const fullPath = basePath ? `${basePath}${folderName}/` : `${folderName}/`;
         await createFolder(fullPath);
         await refreshFileList();
         setOpenFolders(prev => new Set(prev).add(fullPath));
@@ -521,7 +524,86 @@ export function AIStudio() {
             }
         }
     }
-  }
+  };
+
+  const handleExportProject = async () => {
+    toast({ title: 'Exporting project...' });
+    try {
+        const files = await getProjectFiles();
+        const zip = new JSZip();
+        
+        for (const [path, content] of Object.entries(files)) {
+            if (content !== null) {
+                zip.file(path, content);
+            } else if (path.endsWith('/')) {
+                zip.folder(path);
+            }
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(zipBlob);
+        link.download = 'ai-studio-project.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        toast({ title: 'Project exported successfully!' });
+    } catch (error) {
+        console.error('Failed to export project', error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not export project.' });
+    }
+  };
+
+  const handleImportClick = () => {
+    importFileRef.current?.click();
+  };
+
+  const handleImportProject = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    toast({ title: 'Importing project...' });
+    setIsLoading(true);
+
+    try {
+        const zip = new JSZip();
+        const content = await file.arrayBuffer();
+        await zip.loadAsync(content);
+
+        const filesToImport: Record<string, string | null> = {};
+        const promises: Promise<void>[] = [];
+        
+        zip.forEach((relativePath, zipEntry) => {
+            if (zipEntry.dir) {
+                 filesToImport[zipEntry.name] = null;
+            } else {
+                const promise = zipEntry.async('string').then(fileContent => {
+                    filesToImport[zipEntry.name] = fileContent;
+                });
+                promises.push(promise);
+            }
+        });
+
+        await Promise.all(promises);
+        await importProjectFiles(filesToImport);
+        
+        const newFiles = await refreshFileList();
+        const firstFile = newFiles.find(f => !f.endsWith('/')) || 'script.js';
+        await handleFileSelect(firstFile);
+        
+        toast({ title: 'Project imported successfully!' });
+    } catch (error) {
+        console.error('Failed to import project', error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not import project. Ensure it is a valid zip file.' });
+    } finally {
+        setIsLoading(false);
+        if (event.target) {
+            event.target.value = '';
+        }
+    }
+  };
+
 
   return (
     <div className="flex h-screen w-screen bg-background text-foreground font-sans">
@@ -594,7 +676,39 @@ export function AIStudio() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 flex flex-col">
+        <Menubar className="h-auto rounded-none border-x-0 border-t-0 border-b px-2">
+            <MenubarMenu>
+                <MenubarTrigger>File</MenubarTrigger>
+                <MenubarContent>
+                    <MenubarItem onClick={() => handleCreateFile('')}>New File...</MenubarItem>
+                    <MenubarItem onClick={() => handleCreateFolder('')}>New Folder...</MenubarItem>
+                    <MenubarSeparator />
+                    <MenubarItem onClick={handleImportClick}>Import Project...</MenubarItem>
+                    <MenubarItem onClick={handleExportProject}>Export Project...</MenubarItem>
+                </MenubarContent>
+            </MenubarMenu>
+            <MenubarMenu>
+                <MenubarTrigger>Edit</MenubarTrigger>
+                <MenubarContent>
+                    <MenubarItem disabled>Undo</MenubarItem>
+                    <MenubarItem disabled>Redo</MenubarItem>
+                </MenubarContent>
+            </MenubarMenu>
+            <MenubarMenu>
+                <MenubarTrigger>View</MenubarTrigger>
+                <MenubarContent>
+                    <MenubarItem onClick={() => setIsLeftSidebarVisible(p => !p)}>Toggle Primary Side Bar</MenubarItem>
+                    <MenubarItem onClick={() => setIsRightSidebarVisible(p => !p)}>Toggle Assistant Panel</MenubarItem>
+                </MenubarContent>
+            </MenubarMenu>
+             <MenubarMenu>
+                <MenubarTrigger>Run</MenubarTrigger>
+                <MenubarContent>
+                    <MenubarItem onClick={handleRunCode}>Run Code <MenubarShortcut>F5</MenubarShortcut></MenubarItem>
+                </MenubarContent>
+            </MenubarMenu>
+        </Menubar>
+        <main className="flex-1 flex flex-col min-h-0">
           {/* Top Bar */}
           <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 gap-4">
               <div className="flex items-center gap-4">
@@ -622,7 +736,12 @@ export function AIStudio() {
               <DynamicEditor
                 language={language}
                 value={code}
-                onChange={(value) => setCode(value || '')}
+                onChange={(value) => {
+                  setCode(value || '');
+                  if (activeFile) {
+                    saveFile(activeFile, value || '');
+                  }
+                }}
                 onMount={handleEditorDidMount}
                 theme={theme === 'dark' ? 'vs-dark' : 'light'}
               />
@@ -658,7 +777,7 @@ export function AIStudio() {
         </main>
         
         {/* Status Bar */}
-        <footer className="flex h-8 shrink-0 items-center justify-between border-t bg-card px-4 text-xs text-muted-foreground">
+        <footer className="flex h-8 shrink-0 items-center justify-between border-t bg-primary text-primary-foreground px-4 text-xs">
           <div className="flex items-center gap-2">
               <GitBranch className="h-4 w-4" />
               <span>main</span>
@@ -740,6 +859,7 @@ export function AIStudio() {
           </div>
         </aside>
       )}
+      <input type="file" ref={importFileRef} onChange={handleImportProject} style={{ display: 'none' }} accept=".zip" />
     </div>
   );
 }
