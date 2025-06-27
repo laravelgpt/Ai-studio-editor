@@ -39,6 +39,7 @@ import {
   FileCode2,
   GitBranch,
   Puzzle,
+  PanelRight,
 } from 'lucide-react';
 
 const DynamicEditor = dynamic(
@@ -197,6 +198,9 @@ export function AIStudio() {
   const [isOutputVisible, setIsOutputVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>('explorer');
+  const [isLeftSidebarVisible, setIsLeftSidebarVisible] = useState(true);
+  const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(true);
+
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -246,7 +250,7 @@ export function AIStudio() {
     
     setIsLoading(true);
     setChatMessages(prev => [...prev, {role: 'user', content: `Explain this code:\n\`\`\`${language}\n${selectedCode}\n\`\`\``}]);
-
+    setIsRightSidebarVisible(true);
     try {
       const result = await explainCode({ code: selectedCode, language });
       setChatMessages(prev => [...prev, {role: 'ai', content: result.explanation}]);
@@ -262,6 +266,7 @@ export function AIStudio() {
     if (!editorRef.current) return;
     setIsLoading(true);
     setChatMessages(prev => [...prev, {role: 'user', content: 'Fix the errors in the current code.'}]);
+    setIsRightSidebarVisible(true);
     
     try {
       const result = await fixCodeErrors({ code, language });
@@ -307,6 +312,7 @@ export function AIStudio() {
     setChatInput('');
     setIsLoading(true);
     setChatMessages(prev => [...prev, {role: 'user', content: newQuery}]);
+    setIsRightSidebarVisible(true);
 
     try {
         const result = await chatWithCode({ code, language, query: newQuery });
@@ -319,15 +325,24 @@ export function AIStudio() {
     }
   };
 
+  const handleActivityClick = (view: ActiveView) => {
+    if (activeView === view && isLeftSidebarVisible) {
+      setIsLeftSidebarVisible(false);
+    } else {
+      setActiveView(view);
+      setIsLeftSidebarVisible(true);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen bg-background text-foreground font-sans">
       {/* Activity Bar */}
       <div className="flex w-16 flex-col items-center gap-y-4 border-r bg-card py-4">
         <button 
-          onClick={() => setActiveView('explorer')}
+          onClick={() => handleActivityClick('explorer')}
           className={cn(
               "flex h-10 w-10 items-center justify-center rounded-lg",
-              activeView === 'explorer' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+              activeView === 'explorer' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
           )}
           aria-label="Files"
           title="Files"
@@ -335,10 +350,10 @@ export function AIStudio() {
           <FileCode2 className="h-6 w-6" />
         </button>
         <button 
-          onClick={() => setActiveView('source-control')}
+          onClick={() => handleActivityClick('source-control')}
           className={cn(
               "flex h-10 w-10 items-center justify-center rounded-lg",
-              activeView === 'source-control' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+              activeView === 'source-control' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
           )}
           aria-label="Source Control"
           title="Source Control"
@@ -346,10 +361,10 @@ export function AIStudio() {
           <GitBranch className="h-6 w-6" />
         </button>
         <button 
-          onClick={() => setActiveView('extensions')}
+          onClick={() => handleActivityClick('extensions')}
           className={cn(
               "flex h-10 w-10 items-center justify-center rounded-lg",
-              activeView === 'extensions' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+              activeView === 'extensions' && isLeftSidebarVisible ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
           )}
           aria-label="Extensions"
           title="Extensions"
@@ -358,12 +373,14 @@ export function AIStudio() {
         </button>
       </div>
       
-      {/* Left Sidebar (Explorer) */}
-      <div className="hidden w-64 border-r bg-card md:flex md:flex-col shrink-0">
-        {activeView === 'explorer' && <ExplorerPanel language={language} onLanguageChange={handleLanguageChange} />}
-        {activeView === 'source-control' && <SourceControlPanel />}
-        {activeView === 'extensions' && <ExtensionsPanel />}
-      </div>
+      {/* Left Sidebar */}
+      {isLeftSidebarVisible && (
+        <div className="hidden w-64 border-r bg-card md:flex md:flex-col shrink-0">
+          {activeView === 'explorer' && <ExplorerPanel language={language} onLanguageChange={handleLanguageChange} />}
+          {activeView === 'source-control' && <SourceControlPanel />}
+          {activeView === 'extensions' && <ExtensionsPanel />}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -381,6 +398,10 @@ export function AIStudio() {
                   <Button onClick={handleRunCode} disabled={isLoading}>
                       {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                       Run
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setIsRightSidebarVisible(!isRightSidebarVisible)} className="hidden lg:inline-flex">
+                      <PanelRight className="h-5 w-5" />
+                      <span className="sr-only">Toggle Assistant</span>
                   </Button>
               </div>
           </header>
@@ -440,72 +461,74 @@ export function AIStudio() {
       </div>
 
       {/* Right Sidebar (AI Assistant) */}
-      <aside className="w-96 border-l bg-card flex flex-col shrink-0">
-        <header className="p-4 border-b flex items-center justify-between h-14">
-            <h1 className="text-lg font-semibold tracking-tight">AI Assistant</h1>
-            <Button variant="ghost" size="icon" onClick={() => setChatMessages(initialChatMessages)} disabled={isLoading}>
-                <Trash2 className="h-4 w-4" />
-                <span className="sr-only">Clear Chat</span>
-            </Button>
-        </header>
-        
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
-            {chatMessages.map((message, index) => (
-              <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>
-                    {message.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                  </AvatarFallback>
-                </Avatar>
-                <div className={`rounded-lg p-3 text-sm max-w-[80%] break-words ${message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                  <ReactMarkdown 
-                    className="prose prose-sm dark:prose-invert prose-p:my-0 prose-headings:my-1"
-                    remarkPlugins={[remarkGfm]}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
+      {isRightSidebarVisible && (
+        <aside className="w-96 border-l bg-card hidden lg:flex flex-col shrink-0">
+          <header className="p-4 border-b flex items-center justify-between h-14">
+              <h1 className="text-lg font-semibold tracking-tight">AI Assistant</h1>
+              <Button variant="ghost" size="icon" onClick={() => setChatMessages(initialChatMessages)} disabled={isLoading}>
+                  <Trash2 className="h-4 w-4" />
+                  <span className="sr-only">Clear Chat</span>
+              </Button>
+          </header>
+          
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-4">
+              {chatMessages.map((message, index) => (
+                <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>
+                      {message.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className={`rounded-lg p-3 text-sm max-w-[80%] break-words ${message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                    <ReactMarkdown 
+                      className="prose prose-sm dark:prose-invert prose-p:my-0 prose-headings:my-1"
+                      remarkPlugins={[remarkGfm]}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
+              ))}
               </div>
-            ))}
-            </div>
-            <div ref={messagesEndRef} />
-          </ScrollArea>
+              <div ref={messagesEndRef} />
+            </ScrollArea>
 
-          <div className="p-4 border-t bg-background/50">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Button onClick={handleExplain} disabled={isLoading} size="sm" variant="outline" className="flex-1">
-                <Sparkles className="mr-2 h-4 w-4" /> Explain
-              </Button>
-              <Button onClick={handleFixErrors} disabled={isLoading} size="sm" variant="outline" className="flex-1">
-                <Wand2 className="mr-2 h-4 w-4" /> Fix
-              </Button>
-              <Button onClick={handleAutoComplete} disabled={isLoading} size="sm" variant="outline" className="flex-1">
-                <Zap className="mr-2 h-4 w-4" /> Complete
-              </Button>
+            <div className="p-4 border-t bg-background/50">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <Button onClick={handleExplain} disabled={isLoading} size="sm" variant="outline" className="flex-1">
+                  <Sparkles className="mr-2 h-4 w-4" /> Explain
+                </Button>
+                <Button onClick={handleFixErrors} disabled={isLoading} size="sm" variant="outline" className="flex-1">
+                  <Wand2 className="mr-2 h-4 w-4" /> Fix
+                </Button>
+                <Button onClick={handleAutoComplete} disabled={isLoading} size="sm" variant="outline" className="flex-1">
+                  <Zap className="mr-2 h-4 w-4" /> Complete
+                </Button>
+              </div>
+              <form onSubmit={handleChatSubmit} className="flex items-start gap-2">
+                <Textarea 
+                  value={chatInput} 
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder="Ask a question or give an instruction..."
+                  className="min-h-[60px] max-h-48 resize-y text-sm"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleChatSubmit(e as any);
+                    }
+                  }}
+                  disabled={isLoading}
+                />
+                <Button type="submit" size="icon" disabled={isLoading || !chatInput.trim()}>
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </form>
             </div>
-            <form onSubmit={handleChatSubmit} className="flex items-start gap-2">
-              <Textarea 
-                value={chatInput} 
-                onChange={e => setChatInput(e.target.value)}
-                placeholder="Ask a question or give an instruction..."
-                className="min-h-[60px] max-h-48 resize-y text-sm"
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleChatSubmit(e as any);
-                  }
-                }}
-                disabled={isLoading}
-              />
-              <Button type="submit" size="icon" disabled={isLoading || !chatInput.trim()}>
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
-            </form>
           </div>
-        </div>
-      </aside>
+        </aside>
+      )}
     </div>
   );
 }
