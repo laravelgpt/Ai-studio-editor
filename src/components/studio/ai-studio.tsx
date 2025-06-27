@@ -868,27 +868,38 @@ export function AIStudio() {
               />
             </div>
             {isOutputVisible && (
-              <div className="h-64 border-t bg-card">
-                <header className="flex h-12 items-center justify-between border-b px-4">
-                  <div className="flex items-center gap-2">
-                    <Terminal className="h-5 w-5" />
-                    <h2 className="font-medium">Output</h2>
-                  </div>
+              <Tabs defaultValue="output" className="h-64 border-t bg-card flex flex-col">
+                <div className="flex items-center justify-between border-b pl-2 pr-1 shrink-0">
+                  <TabsList className="bg-transparent p-0">
+                    <TabsTrigger value="output" className="px-4 py-3 text-sm font-medium">Output</TabsTrigger>
+                    <TabsTrigger value="terminal" className="px-4 py-3 text-sm font-medium">Terminal</TabsTrigger>
+                  </TabsList>
                   <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(false)}>
                     <ChevronDown className="h-5 w-5" />
                   </Button>
-                </header>
-                <ScrollArea className="h-[calc(16rem-3rem)]">
-                  <pre className="p-4 text-sm font-code">{output.join('\n')}</pre>
-                </ScrollArea>
-              </div>
+                </div>
+                <TabsContent value="output" className="flex-1 mt-0 overflow-y-auto">
+                  <ScrollArea className="h-full">
+                    <pre className="p-4 text-sm font-code">{output.join('\n')}</pre>
+                  </ScrollArea>
+                </TabsContent>
+                <TabsContent value="terminal" className="flex-1 mt-0 overflow-y-auto">
+                  <ScrollArea className="h-full">
+                    <div className="p-4 text-sm font-code bg-background h-full">
+                      <p>$ Welcome to the mock terminal!</p>
+                      <p>$ Interactive terminal coming soon.</p>
+                      <p>{'> '}</p>
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
             )}
             {!isOutputVisible && (
               <header className="flex h-12 items-center justify-between border-t px-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Terminal className="h-5 w-5" />
-                  <h2 className="font-medium">Output</h2>
-                  </div>
+                  <h2 className="font-medium">Terminal</h2>
+                </div>
                 <Button variant="ghost" size="icon" onClick={() => setIsOutputVisible(true)}>
                   <ChevronUp className="h-5 w-5" />
                 </Button>
